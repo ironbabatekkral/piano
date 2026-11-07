@@ -15,7 +15,7 @@ Kurulum, sunucu ya da hesap gerekmez. Ses tarayıcıda Web Audio API ile üretil
 - **Tuş atamaları:** her notanın tuşunu kendin seçebilirsin
 - **Öğretici:** çalınacak tuşlar ekranda yanar, doğru basınca sıradakine geçer
   - Oto oktav: klavyeyi parçanın aralığına kendisi kaydırır
-  - Oto sustain: her yeni notada pedalı değiştirir, sesler birbirine bağlanır ama bulanmaz
+  - Oto pedal: parçanın notalarındaki pedal işaretlerine göre sustain pedalına basar; işaret yoksa basmaz
   - Döngü: parça bitince baştan başlar
 - **Kendi parçaların:** notaları yazıp kaydedebilirsin
 
@@ -32,12 +32,14 @@ Kurulum, sunucu ya da hesap gerekmez. Ses tarayıcıda Web Audio API ile üretil
 
 ```
 Do4 Re4 Mi4 Do4+Mi4+Sol4
-C4 D4 E4 C4+E4+G4
+Ped C4+E4+G4 Ped F4+A4+C5 * G4 E4
 ```
 
 - `+` aynı anda basılacak notalar
 - `#` diyez (`Fa#4`), `b` bemol (`Sib3`, `Eb5`)
 - Oktav yazılmazsa 4 sayılır
+- `Ped` sustain pedalına basar (zaten basılıysa değiştirir: önceki sesler susar), `*` pedalı kaldırır; ikisi de kendisinden sonraki notada uygulanır
+- Pedal işareti yazılmayan parçada pedala basılmaz
 
 ## Verilerin nerede tutulur
 

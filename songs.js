@@ -2,7 +2,8 @@
 
 // Lessons. Notes are separated by spaces; "+" joins notes played together.
 // Accepted names: C D E F G A B or Do Re Mi Fa Sol La Si, with optional # / b and octave (default 4).
-// `sustain` is the default for the "Oto sustain" checkbox when the song is selected.
+// Pedal marks, as in sheet music: "Ped" presses (or changes) the sustain pedal and "*" lifts it,
+// on the note that follows. A song without pedal marks never touches the pedal.
 // `tip` is shown before the song starts.
 // Popular intros are short right-hand transcriptions for personal practice; rhythm is not encoded.
 
@@ -13,33 +14,30 @@ const SONGS = [
   {
     group: 'Popüler intro\'lar',
     title: 'Kanye West – Runaway',
-    sustain: true,
     tip: 'Tek nota ile başlar: aynı Mi\'ye 15 kez, eşit aralıklarla bas. Sonra ana kalıp 6 kez döner.',
-    notes: rep('E6', 15) + ' ' + rep('E6 E6 E6 E5  D#6 D#6 D#6 D#5  C#6 C#6 C#6 C#5  A5 A5 G#5', 6),
+    notes: 'Ped ' + rep('E6', 15) + ' '
+      + rep('Ped E6 E6 E6 E5  Ped D#6 D#6 D#6 D#5  Ped C#6 C#6 C#6 C#5  Ped A5 A5 G#5', 6),
   },
   {
     group: 'Popüler intro\'lar',
     title: 'Dr. Dre – Still D.R.E.',
-    sustain: false,
     tip: 'Akorlara kısa ve sert vur, hemen bırak. Her turda parmak tek tek kayar: 8 + 3 + 5 vuruş, 4 tur.',
     notes: rep(`${rep('C5+E5+A5', 8)} ${rep('B4+E5+A5', 3)} ${rep('B4+E5+G5', 5)}`, 4),
   },
   {
     group: 'Popüler intro\'lar',
     title: 'Linkin Park – In the End',
-    sustain: true,
     tip: 'Aynı kalıp sekiz kez döner; son turda Fa\'da bitir ve çınlamaya bırak.',
-    notes: rep('Eb5 Bb5 Bb5 Gb5 F5 F5 F5 F5 Gb5', 7) + ' Eb5 Bb5 Bb5 Gb5 F5',
+    notes: rep('Ped Eb5 Bb5 Bb5 Gb5  Ped F5 F5 F5 F5 Gb5', 7) + ' Ped Eb5 Bb5 Bb5 Gb5  Ped F5',
   },
   {
     group: 'Popüler intro\'lar',
     title: 'Coldplay – Clocks',
-    sustain: true,
     tip: 'Her ölçü yukarıdan aşağı üç notalık bir arpej: 3 + 3 + 2 vuruş. 4 ölçülük kalıp 4 kez döner.',
-    notes: rep(`Eb5 Bb4 G4 Eb5 Bb4 G4 Eb5 Bb4
-                Db5 Bb4 F4 Db5 Bb4 F4 Db5 Bb4
-                Db5 Bb4 F4 Db5 Bb4 F4 Db5 Bb4
-                C5 Ab4 F4 C5 Ab4 F4 C5 Ab4`, 4),
+    notes: rep(`Ped Eb5 Bb4 G4 Eb5 Bb4 G4 Eb5 Bb4
+                Ped Db5 Bb4 F4 Db5 Bb4 F4 Db5 Bb4
+                Ped Db5 Bb4 F4 Db5 Bb4 F4 Db5 Bb4
+                Ped C5 Ab4 F4 C5 Ab4 F4 C5 Ab4`, 4),
   },
   {
     group: 'Başlangıç',
@@ -70,7 +68,7 @@ const SONGS = [
   {
     group: 'Başlangıç',
     title: 'İlk akorlar (Do, Fa, Sol)',
-    sustain: true,
-    notes: 'C4+E4+G4 C4+F4+A4 B3+D4+G4 C4+E4+G4  C3+C4+E4+G4 F3+C4+F4+A4 G3+B3+D4+G4 C3+C4+E4+G4',
+    notes: `Ped C4+E4+G4 Ped C4+F4+A4 Ped B3+D4+G4 Ped C4+E4+G4
+            Ped C3+C4+E4+G4 Ped F3+C4+F4+A4 Ped G3+B3+D4+G4 Ped C3+C4+E4+G4`,
   },
 ];

@@ -14,7 +14,9 @@ const DRAFT_STORAGE_KEY = 'piano.customNotes';
 const LIBRARY_STORAGE_KEY = 'piano.customSongs';
 const AUTO_OCTAVE_STORAGE_KEY = 'piano.autoOctave';
 const LOOP_STORAGE_KEY = 'piano.loop';
-const FINISH_RING_MS = 2000; // let the last note ring before auto-sustain lets go
+const AUTO_PEDAL_STORAGE_KEY = 'piano.autoPedal';
+const FINISH_RING_MS = 2000; // let the last note ring before the auto pedal lets go
+const PEDAL_DOWN_RE = /^ped\.?$/i;
 
 function parseNote(token) {
   const m = NOTE_RE.exec(token);
@@ -26,10 +28,20 @@ function parseNote(token) {
   return midi;
 }
 
-// Returns an array of steps; each step is an array of MIDI notes to play together.
+// Returns an array of steps: { notes: MIDI notes played together, pedal: 'down' | 'up' | null }.
+// Pedal marks work like sheet music: "Ped" presses the pedal (or changes it if already down)
+// and "*" lifts it, both taking effect on the first note of the step that follows them.
 function parseSong(text) {
-  const steps = text.split(/[\s,|]+/).filter(Boolean)
-    .map((token) => [...new Set(token.split('+').filter(Boolean).map(parseNote))]);
+  const steps = [];
+  let pedal = null;
+  for (const token of text.split(/[\s,|]+/).filter(Boolean)) {
+    if (PEDAL_DOWN_RE.test(token)) pedal = 'down';
+    else if (token === '*') pedal = 'up';
+    else {
+      steps.push({ notes: [...new Set(token.split('+').filter(Boolean).map(parseNote))], pedal });
+      pedal = null;
+    }
+  }
   if (steps.length === 0) throw new Error('Hiç nota yazılmadı.');
   return steps;
 }
@@ -40,7 +52,7 @@ const songSelect = document.getElementById('songSelect');
 const toggleBtn = document.getElementById('tutorToggle');
 const statusEl = document.getElementById('tutorStatus');
 const autoOctaveEl = document.getElementById('autoOctave');
-const autoSustainEl = document.getElementById('autoSustain');
+const autoPedalEl = document.getElementById('autoPedal');
 const loopEl = document.getElementById('loopSong');
 const titleEl = document.getElementById('customTitle');
 const customEl = document.getElementById('customNotes');
@@ -114,9 +126,9 @@ function fittingBase(notes) {
 
 function fitCurrentStep() {
   if (!tutor.active || !autoOctaveEl.checked) return;
-  const step = tutor.steps[tutor.index];
-  if (fits(state.leftBase, step)) return;
-  const base = fittingBase(step);
+  const { notes } = tutor.steps[tutor.index];
+  if (fits(state.leftBase, notes)) return;
+  const base = fittingBase(notes);
   if (base !== null) setOctaveBase(base);
 }
 
@@ -127,10 +139,10 @@ function start(steps) {
   tutor.hits.clear();
   if (autoOctaveEl.checked) {
     // Prefer one position for the whole song so the keys don't move while playing.
-    const base = fittingBase(steps.flat()) ?? fittingBase(steps[0]);
+    const base = fittingBase(steps.flatMap((s) => s.notes)) ?? fittingBase(steps[0].notes);
     if (base !== null) setOctaveBase(base);
   }
-  setAutoSustain(autoSustainEl.checked);
+  setAutoSustain(false); // the pedal starts up; only the song's pedal marks press it
   render();
 }
 
@@ -158,29 +170,31 @@ function render() {
   toggleBtn.textContent = tutor.active ? 'Durdur' : 'Başlat';
 
   if (!tutor.active) {
-    const tip = selectedSong().tip;
+    const song = selectedSong();
+    const pedalNote = parseSong(song.notes).some((s) => s.pedal) ? '' : ' Bu parçada pedal işareti yok, pedala basılmaz.';
     statusEl.textContent = tutor.finished
       ? 'Bitti! Tekrar çalmak için Başlat\'a bas.'
-      : `Başlat'a bas.${tip ? ' İpucu: ' + tip : ''}`;
+      : `Başlat'a bas.${song.tip ? ' İpucu: ' + song.tip : ''}${pedalNote}`;
     return;
   }
 
   const step = tutor.steps[tutor.index];
-  for (const midi of step) {
+  for (const midi of step.notes) {
     const el = keyEls.get(midi);
     el.classList.add('target');
     if (tutor.hits.has(midi)) el.classList.add('hit');
   }
 
-  const parts = step.map((m) => {
+  const parts = step.notes.map((m) => {
     const key = keyFor(m);
     return `${solfege(m)} (${noteName(m)}) → ${key ? `${key} tuşu` : 'klavyede yok'}`;
   });
-  const outOfRange = step.some((m) => keyFor(m) === null);
+  const outOfRange = step.notes.some((m) => keyFor(m) === null);
   const hint = autoOctaveEl.checked ? ' · bu notaya tuş atanmamış ya da iki ele sığmıyor' : ' · ← → ile oktav değiştir';
   const round = loopEl.checked ? `Tur ${tutor.round} · ` : '';
+  const pedal = autoPedalEl.checked && step.pedal ? ` · pedal ${step.pedal === 'down' ? 'basılır' : 'kalkar'}` : '';
   statusEl.textContent = `${round}${tutor.index + 1} / ${tutor.steps.length} · Sıradaki: ${parts.join(' + ')}`
-    + (outOfRange ? hint : '');
+    + pedal + (outOfRange ? hint : '');
 }
 
 function flashWrong(midi) {
@@ -194,15 +208,13 @@ function flashWrong(midi) {
 function onNote(midi) {
   if (!tutor.active) return;
   const step = tutor.steps[tutor.index];
-  if (!step.includes(midi)) {
+  if (!step.notes.includes(midi)) {
     flashWrong(midi);
     return;
   }
-  // Auto-sustain changes the pedal on the first correct note of each step:
-  // the previous step rings until the new one begins, so lines stay smooth but never blur.
-  if (state.autoSustain && tutor.hits.size === 0) dampenUnheld();
+  if (autoPedalEl.checked && tutor.hits.size === 0) applyPedal(step.pedal);
   tutor.hits.add(midi);
-  if (step.every((m) => tutor.hits.has(m))) {
+  if (step.notes.every((m) => tutor.hits.has(m))) {
     tutor.index++;
     tutor.hits.clear();
     if (tutor.index >= tutor.steps.length) finish();
@@ -217,14 +229,19 @@ document.addEventListener('piano:keymap', render);
 
 // ---------- Controls ----------
 
-function applySongDefaults() {
-  autoSustainEl.checked = Boolean(selectedSong().sustain);
+// Pressing the pedal while it is already down is a pedal change: notes no longer held stop ringing.
+function applyPedal(action) {
+  if (action === 'down') {
+    if (state.autoSustain) dampenUnheld();
+    else setAutoSustain(true);
+  } else if (action === 'up') {
+    setAutoSustain(false);
+  }
 }
 
 songSelect.addEventListener('change', () => {
   songSelect.blur();
   editBtn.disabled = deleteBtn.disabled = !isCustomSelected();
-  applySongDefaults();
   if (tutor.active) start(parseSong(selectedSong().notes));
   else render();
 });
@@ -243,9 +260,12 @@ autoOctaveEl.addEventListener('change', () => {
   render();
 });
 
-autoSustainEl.addEventListener('change', () => {
-  autoSustainEl.blur();
-  if (tutor.active) setAutoSustain(autoSustainEl.checked);
+autoPedalEl.checked = localStorage.getItem(AUTO_PEDAL_STORAGE_KEY) !== 'false';
+autoPedalEl.addEventListener('change', () => {
+  autoPedalEl.blur();
+  localStorage.setItem(AUTO_PEDAL_STORAGE_KEY, String(autoPedalEl.checked));
+  if (!autoPedalEl.checked) setAutoSustain(false);
+  render();
 });
 
 loopEl.checked = localStorage.getItem(LOOP_STORAGE_KEY) === 'true';
@@ -283,7 +303,7 @@ saveBtn.addEventListener('click', () => {
     const title = titleEl.value.trim();
     if (!title) throw new Error('Parçaya bir ad ver.');
     parseSong(customEl.value); // validate before saving
-    const song = { title, notes: customEl.value.trim(), sustain: autoSustainEl.checked };
+    const song = { title, notes: customEl.value.trim() };
     const existing = library.findIndex((s) => s.title === title);
     if (existing >= 0) library[existing] = song;
     else library.push(song);
@@ -309,10 +329,8 @@ deleteBtn.addEventListener('click', () => {
   library.splice(Number(songSelect.value.split(':')[1]), 1);
   saveLibrary();
   renderSongList('b:0');
-  applySongDefaults();
   render();
 });
 
 renderSongList('b:0');
-applySongDefaults();
 render();
