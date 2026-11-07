@@ -90,7 +90,21 @@ output { font-weight: 600; font-variant-numeric: tabular-nums; }
 .black.target { background: var(--accent); box-shadow: 0 0 14px 3px var(--accent); }
 .white.hit { background: #a9d79a; box-shadow: none; }
 .black.hit { background: #4f8f3f; box-shadow: none; }
+.white.go { background: #8fe08a; box-shadow: inset 0 -70px 40px -30px #3fbf4a; }
+.black.go { background: #3fbf4a; box-shadow: 0 0 14px 3px #3fbf4a; }
 .key.wrong { background: #e5756b; box-shadow: none; }
+
+.highway {
+  display: block;
+  width: 100%;
+  height: 240px;
+  margin-top: 4px;
+  background: #151413;
+  border-radius: 6px 6px 0 0;
+}
+.highway[hidden] { display: none; }
+.speed output { margin-left: 4px; font-size: 13px; }
+.speed input { width: 110px; accent-color: var(--accent); vertical-align: middle; }
 
 .tutor { margin-bottom: 16px; }
 .tutor-row { display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; }

@@ -25,6 +25,8 @@
         <label class="check"><input id="autoOctave" type="checkbox" checked> Oto oktav</label>
         <label class="check" title="Parçadaki Ped / * işaretlerine göre pedala basar"><input id="autoPedal" type="checkbox" checked> Oto pedal</label>
         <label class="check"><input id="loopSong" type="checkbox"> Döngü</label>
+        <label class="check" title="Açıkken notalar süresine göre yukarıdan akar; tuş yeşil yanınca bas. Kapalıyken tuş sen basana kadar bekler."><input id="rhythmMode" type="checkbox" checked> Ritim</label>
+        <label class="stat speed"><span class="label">Hız</span><span><input id="speed" type="range" min="40" max="150" step="5" value="100"> <output id="speedOut"></output></span></label>
         <p id="tutorStatus" class="tutor-status" aria-live="polite"></p>
       </div>
       <details class="custom">
@@ -41,6 +43,8 @@
         <p class="hint">Notaları boşlukla ayır. Aynı anda basılacaklar için + (Do4+Mi4+Sol4), diyez için # (Fa#4), bemol için b (Sib3). Oktav yazmazsan 4 sayılır. Pedal için notadan önce Ped (bas ya da değiştir), kaldırmak için * yaz; pedal işareti yoksa pedala basılmaz. Kaydettiğin parçalar "Benim parçalarım" listesine eklenir; yalnızca bu tarayıcıda saklanır, hiçbir yere gönderilmez.</p>
       </details>
     </section>
+
+    <canvas id="highway" class="highway" aria-hidden="true" hidden></canvas>
 
     <div id="keyboard" class="keyboard" aria-label="Piyano klavyesi"></div>
 
@@ -68,6 +72,7 @@
 
   <script src="songs.js"></script>
   <script src="piano.js"></script>
+  <script src="highway.js"></script>
   <script src="tutor.js"></script>
   <script src="keymap.js"></script>
 </body>

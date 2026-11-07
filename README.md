@@ -14,6 +14,7 @@ Kurulum, sunucu ya da hesap gerekmez. Ses tarayıcıda Web Audio API ile üretil
   - Sağ el: beyaz `Y U I O P [ ] \`, siyah `7 8 0 - =`
 - **Tuş atamaları:** her notanın tuşunu kendin seçebilirsin
 - **Öğretici:** çalınacak tuşlar ekranda yanar, doğru basınca sıradakine geçer
+  - Ritim: notalar süresine göre klavyenin üstünde aşağı akar, bar klavyeye değdiği an basma zamanıdır. Tuş zamanı yaklaşırken turuncu, basma zamanı gelince yeşil yanar. Erken basarsan sayılmaz; geç basarsan ne kadar geç kaldığın yazılır ve parça seni bekler, nota atlamaz. Kapatırsan tuş sen basana kadar bekler. Hız kaydırıcısı tempoyu %40–150 arasında değiştirir
   - Oto oktav: klavyeyi parçanın aralığına kendisi kaydırır
   - Oto pedal: parçanın notalarındaki pedal işaretlerine göre sustain pedalına basar; işaret yoksa basmaz
   - Döngü: parça bitince baştan başlar
@@ -38,6 +39,8 @@ Ped C4+E4+G4 Ped F4+A4+C5 * G4 E4
 - `+` aynı anda basılacak notalar
 - `#` diyez (`Fa#4`), `b` bemol (`Sib3`, `Eb5`)
 - Oktav yazılmazsa 4 sayılır
+- `bpm=85` tempo (varsayılan 90), `len=0.5` bundan sonraki notaların varsayılan süresi (vuruş; varsayılan 1)
+- `C4:2` tek notanın süresi (2 vuruş), `r:1` 1 vuruşluk es (sessizlik)
 - `Ped` sustain pedalına basar (zaten basılıysa değiştirir: önceki sesler susar), `*` pedalı kaldırır; ikisi de kendisinden sonraki notada uygulanır
 - Pedal işareti yazılmayan parçada pedala basılmaz
 

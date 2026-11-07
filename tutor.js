@@ -1,6 +1,10 @@
 'use strict';
 
-// Wait-mode tutor: lights up the key(s) to play next and advances only when they are played.
+// Tutor: lights up the key(s) to play next.
+// Wait mode: the key stays lit until it is played.
+// Rhythm mode: notes fall toward the keyboard (highway.js); a key glows amber as its time approaches
+// and turns green when it is time to press it. A note that isn't played in time makes the song
+// clock wait for it, so nothing is ever skipped.
 // Relies on globals from piano.js (keyEls, noteName, codesFor, keyLabel, state, setOctaveBase, ...).
 
 const SOLFEGE_NAMES = ['Do', 'Do#', 'Re', 'Re#', 'Mi', 'Fa', 'Fa#', 'Sol', 'Sol#', 'La', 'La#', 'Si'];
@@ -8,15 +12,24 @@ const solfege = (m) => SOLFEGE_NAMES[m % 12] + (Math.floor(m / 12) - 1);
 
 const PITCH = { c: 0, d: 2, e: 4, f: 5, g: 7, a: 9, b: 11, do: 0, re: 2, mi: 4, fa: 5, sol: 7, la: 9, si: 11 };
 const NOTE_RE = /^(do|re|mi|fa|sol|la|si|[a-g])(#|b)?(\d)?$/i;
+const PEDAL_DOWN_RE = /^ped\.?$/i;
+const SETTING_RE = /^(bpm|len)=(\d+(?:\.\d+)?)$/i;
 
 // Everything below is kept in this browser's localStorage only; nothing is uploaded anywhere.
 const DRAFT_STORAGE_KEY = 'piano.customNotes';
 const LIBRARY_STORAGE_KEY = 'piano.customSongs';
 const AUTO_OCTAVE_STORAGE_KEY = 'piano.autoOctave';
-const LOOP_STORAGE_KEY = 'piano.loop';
 const AUTO_PEDAL_STORAGE_KEY = 'piano.autoPedal';
-const FINISH_RING_MS = 2000; // let the last note ring before the auto pedal lets go
-const PEDAL_DOWN_RE = /^ped\.?$/i;
+const LOOP_STORAGE_KEY = 'piano.loop';
+const RHYTHM_STORAGE_KEY = 'piano.rhythm';
+const SPEED_STORAGE_KEY = 'piano.speed';
+
+const DEFAULT_BPM = 90;
+const FINISH_RING_MS = 2000;   // let the last note ring before the auto pedal lets go
+const LEAD_IN_SECONDS = 2.5;   // time before the first note reaches the keyboard
+const APPROACH_SECONDS = 1.5;  // a key starts glowing amber this long before its time
+const EARLY_TOLERANCE_S = 0.15; // the key turns green (and presses count) this long before its time
+const ON_TIME_S = 0.15;        // finishing a step within this after its time counts as on time
 
 function parseNote(token) {
   const m = NOTE_RE.exec(token);
@@ -28,25 +41,73 @@ function parseNote(token) {
   return midi;
 }
 
-// Returns an array of steps: { notes: MIDI notes played together, pedal: 'down' | 'up' | null }.
-// Pedal marks work like sheet music: "Ped" presses the pedal (or changes it if already down)
-// and "*" lifts it, both taking effect on the first note of the step that follows them.
+// Song text -> { steps, bpm }. Tokens:
+//   C4  Do4+Mi4+Sol4   a note or chord; ":2" after it sets its length in beats (C4:2, Eb5:0.5)
+//   bpm=85             tempo (default 90)
+//   len=0.5            default length for the notes that follow (default 1 beat)
+//   r:2                a rest of 2 beats (r alone = the current len)
+//   Ped / *            press (or change) / lift the sustain pedal on the next note
+// Each step: { notes, beats, pedal: 'down' | 'up' | null, time: start in beats }.
 function parseSong(text) {
   const steps = [];
   let pedal = null;
+  let bpm = DEFAULT_BPM;
+  let len = 1;
+  let time = 0;
   for (const token of text.split(/[\s,|]+/).filter(Boolean)) {
-    if (PEDAL_DOWN_RE.test(token)) pedal = 'down';
-    else if (token === '*') pedal = 'up';
-    else {
-      steps.push({ notes: [...new Set(token.split('+').filter(Boolean).map(parseNote))], pedal });
-      pedal = null;
+    const setting = SETTING_RE.exec(token);
+    if (setting) {
+      const value = Number(setting[2]);
+      if (setting[1].toLowerCase() === 'bpm') {
+        if (value < 20 || value > 300) throw new Error(`Tempo 20 ile 300 arasında olmalı: "${token}"`);
+        bpm = value;
+      } else {
+        if (!(value > 0)) throw new Error(`Süre sıfırdan büyük olmalı: "${token}"`);
+        len = value;
+      }
+      continue;
     }
+    if (PEDAL_DOWN_RE.test(token)) {
+      pedal = 'down';
+      continue;
+    }
+    if (token === '*') {
+      pedal = 'up';
+      continue;
+    }
+    const [chord, length, extra] = token.split(':');
+    const beats = length === undefined ? len : Number(length);
+    if (extra !== undefined || !(beats > 0) || !Number.isFinite(beats)) throw new Error(`Tanınmayan süre: "${token}"`);
+    if (/^r(est)?$/i.test(chord)) {
+      time += beats; // a rest only moves the clock
+      continue;
+    }
+    const notes = [...new Set(chord.split('+').filter(Boolean).map(parseNote))];
+    if (notes.length === 0) throw new Error(`Tanınmayan nota: "${token}"`);
+    steps.push({ notes, beats, pedal, time });
+    time += beats;
+    pedal = null;
   }
   if (steps.length === 0) throw new Error('Hiç nota yazılmadı.');
-  return steps;
+  return { steps, bpm };
 }
 
-const tutor = { steps: [], index: 0, round: 1, hits: new Set(), active: false, finished: false };
+const tutor = {
+  steps: [],
+  bpm: DEFAULT_BPM,
+  index: 0,
+  round: 1,
+  hits: new Set(),
+  active: false,
+  finished: false,
+  t: 0,               // song clock in beats
+  waitingSince: null, // performance.now() when the clock stopped to wait for the current step
+  lastFrame: 0,
+  frame: null,
+  onTime: 0,
+  feedback: '',
+  result: '',
+};
 
 const songSelect = document.getElementById('songSelect');
 const toggleBtn = document.getElementById('tutorToggle');
@@ -54,6 +115,9 @@ const statusEl = document.getElementById('tutorStatus');
 const autoOctaveEl = document.getElementById('autoOctave');
 const autoPedalEl = document.getElementById('autoPedal');
 const loopEl = document.getElementById('loopSong');
+const rhythmEl = document.getElementById('rhythmMode');
+const speedEl = document.getElementById('speed');
+const speedOut = document.getElementById('speedOut');
 const titleEl = document.getElementById('customTitle');
 const customEl = document.getElementById('customNotes');
 const tryBtn = document.getElementById('customStart');
@@ -66,6 +130,12 @@ const keyFor = (midi) => {
   const codes = codesFor(midi);
   return codes.length ? codes.map(keyLabel).join(' / ') : null;
 };
+
+const inRhythm = () => rhythmEl.checked;
+const beatsPerSecond = () => (tutor.bpm / 60) * (Number(speedEl.value) / 100);
+const currentStep = () => tutor.steps[tutor.index];
+const secondsUntilDue = () => (currentStep().time - tutor.t) / beatsPerSecond();
+const isDue = () => secondsUntilDue() <= EARLY_TOLERANCE_S;
 
 // ---------- Local song library ----------
 
@@ -126,24 +196,84 @@ function fittingBase(notes) {
 
 function fitCurrentStep() {
   if (!tutor.active || !autoOctaveEl.checked) return;
-  const { notes } = tutor.steps[tutor.index];
+  const { notes } = currentStep();
   if (fits(state.leftBase, notes)) return;
   const base = fittingBase(notes);
   if (base !== null) setOctaveBase(base);
 }
 
+// ---------- Rhythm clock ----------
+
+function rewindToLeadIn() {
+  tutor.t = currentStep().time - LEAD_IN_SECONDS * beatsPerSecond();
+  tutor.waitingSince = null;
+}
+
+function startClock() {
+  cancelAnimationFrame(tutor.frame);
+  tutor.frame = null;
+  highwayEl.hidden = !inRhythm();
+  if (!tutor.active || !inRhythm()) {
+    clearHighway();
+    return;
+  }
+  tutor.lastFrame = performance.now();
+  tutor.frame = requestAnimationFrame(tick);
+}
+
+function tick(now) {
+  if (!tutor.active || !inRhythm()) {
+    tutor.frame = null;
+    return;
+  }
+  // Cap the step so a backgrounded tab doesn't jump the clock forward.
+  const dt = Math.min(0.1, (now - tutor.lastFrame) / 1000);
+  tutor.lastFrame = now;
+  if (tutor.waitingSince === null) {
+    tutor.t += dt * beatsPerSecond();
+    if (tutor.t >= currentStep().time) {
+      tutor.t = currentStep().time; // hold here until the step is played
+      tutor.waitingSince = now;
+    }
+  }
+  renderTiming();
+  drawHighway({
+    steps: tutor.steps, index: tutor.index, t: tutor.t, bps: beatsPerSecond(), go: isDue(), hits: tutor.hits,
+  });
+  tutor.frame = requestAnimationFrame(tick);
+}
+
+// Amber while the current step approaches, green once it is time to press it.
+function renderTiming() {
+  const seconds = secondsUntilDue();
+  const go = seconds <= EARLY_TOLERANCE_S;
+  const approaching = seconds <= APPROACH_SECONDS;
+  for (const midi of currentStep().notes) {
+    const el = keyEls.get(midi);
+    const hit = tutor.hits.has(midi);
+    el.classList.toggle('hit', hit);
+    el.classList.toggle('go', go && !hit);
+    el.classList.toggle('target', approaching && !go && !hit);
+  }
+}
+
 // ---------- Lesson flow ----------
 
-function start(steps) {
-  Object.assign(tutor, { steps, index: 0, round: 1, active: true, finished: false });
+function start(song) {
+  Object.assign(tutor, {
+    steps: song.steps, bpm: song.bpm, index: 0, round: 1, active: true, finished: false,
+    onTime: 0, feedback: '', result: '',
+  });
   tutor.hits.clear();
   if (autoOctaveEl.checked) {
     // Prefer one position for the whole song so the keys don't move while playing.
-    const base = fittingBase(steps.flatMap((s) => s.notes)) ?? fittingBase(steps[0].notes);
+    const base = fittingBase(song.steps.flatMap((s) => s.notes)) ?? fittingBase(song.steps[0].notes);
     if (base !== null) setOctaveBase(base);
   }
   setAutoSustain(false); // the pedal starts up; only the song's pedal marks press it
+  rewindToLeadIn();
   render();
+  startClock();
 }
 
 function stop() {
@@ -151,38 +281,51 @@ function stop() {
   tutor.finished = false;
   setAutoSustain(false);
   render();
+  startClock();
 }
 
+const roundResult = () => (inRhythm() ? ` Zamanında: ${tutor.onTime} / ${tutor.steps.length}.` : '');
+
 function finish() {
+  const result = roundResult();
   if (loopEl.checked) {
+    tutor.feedback = `Tur ${tutor.round} bitti.${result}`;
     tutor.index = 0;
     tutor.round++;
+    tutor.onTime = 0;
+    rewindToLeadIn();
     fitCurrentStep();
     return;
   }
   tutor.active = false;
   tutor.finished = true;
+  tutor.result = result;
   setTimeout(() => { if (!tutor.active) setAutoSustain(false); }, FINISH_RING_MS);
+  startClock();
 }
 
 function render() {
-  for (const el of keyEls.values()) el.classList.remove('target', 'hit');
+  for (const el of keyEls.values()) el.classList.remove('target', 'hit', 'go');
   toggleBtn.textContent = tutor.active ? 'Durdur' : 'Başlat';
 
   if (!tutor.active) {
     const song = selectedSong();
-    const pedalNote = parseSong(song.notes).some((s) => s.pedal) ? '' : ' Bu parçada pedal işareti yok, pedala basılmaz.';
+    const pedalNote = parseSong(song.notes).steps.some((s) => s.pedal) ? '' : ' Bu parçada pedal işareti yok, pedala basılmaz.';
     statusEl.textContent = tutor.finished
-      ? 'Bitti! Tekrar çalmak için Başlat\'a bas.'
+      ? `Bitti!${tutor.result} Tekrar çalmak için Başlat'a bas.`
       : `Başlat'a bas.${song.tip ? ' İpucu: ' + song.tip : ''}${pedalNote}`;
     return;
   }
 
-  const step = tutor.steps[tutor.index];
-  for (const midi of step.notes) {
-    const el = keyEls.get(midi);
-    el.classList.add('target');
-    if (tutor.hits.has(midi)) el.classList.add('hit');
+  const step = currentStep();
+  if (inRhythm()) {
+    renderTiming();
+  } else {
+    for (const midi of step.notes) {
+      const el = keyEls.get(midi);
+      el.classList.add('target');
+      if (tutor.hits.has(midi)) el.classList.add('hit');
+    }
   }
 
   const parts = step.notes.map((m) => {
@@ -193,8 +336,9 @@ function render() {
   const hint = autoOctaveEl.checked ? ' · bu notaya tuş atanmamış ya da iki ele sığmıyor' : ' · ← → ile oktav değiştir';
   const round = loopEl.checked ? `Tur ${tutor.round} · ` : '';
   const pedal = autoPedalEl.checked && step.pedal ? ` · pedal ${step.pedal === 'down' ? 'basılır' : 'kalkar'}` : '';
+  const feedback = inRhythm() && tutor.feedback ? ` · ${tutor.feedback}` : '';
   statusEl.textContent = `${round}${tutor.index + 1} / ${tutor.steps.length} · Sıradaki: ${parts.join(' + ')}`
-    + pedal + (outOfRange ? hint : '');
+    + pedal + (outOfRange ? hint : '') + feedback;
 }
 
 function flashWrong(midi) {
@@ -205,16 +349,35 @@ function flashWrong(midi) {
   setTimeout(() => el.classList.remove('wrong'), 250);
 }
 
+// How late the finished step was: the time the clock spent waiting for it.
+function judgeStep() {
+  const late = tutor.waitingSince === null ? 0 : (performance.now() - tutor.waitingSince) / 1000;
+  if (late <= ON_TIME_S) {
+    tutor.onTime++;
+    tutor.feedback = 'Tam zamanında';
+  } else {
+    tutor.feedback = `Geç: ${late.toFixed(1)} sn`;
+  }
+  tutor.waitingSince = null;
+}
+
 function onNote(midi) {
   if (!tutor.active) return;
-  const step = tutor.steps[tutor.index];
+  const step = currentStep();
   if (!step.notes.includes(midi)) {
     flashWrong(midi);
+    return;
+  }
+  if (inRhythm() && !isDue() && !tutor.hits.has(midi)) {
+    flashWrong(midi);
+    tutor.feedback = 'Erken! Yeşil yanınca bas.';
+    render();
     return;
   }
   if (autoPedalEl.checked && tutor.hits.size === 0) applyPedal(step.pedal);
   tutor.hits.add(midi);
   if (step.notes.every((m) => tutor.hits.has(m))) {
+    if (inRhythm()) judgeStep();
     tutor.index++;
     tutor.hits.clear();
     if (tutor.index >= tutor.steps.length) finish();
@@ -275,6 +438,25 @@ loopEl.addEventListener('change', () => {
   render();
 });
 
+rhythmEl.checked = localStorage.getItem(RHYTHM_STORAGE_KEY) !== 'false';
+rhythmEl.addEventListener('change', () => {
+  rhythmEl.blur();
+  localStorage.setItem(RHYTHM_STORAGE_KEY, String(rhythmEl.checked));
+  tutor.feedback = '';
+  if (tutor.active && inRhythm()) rewindToLeadIn();
+  render();
+  startClock();
+});
+
+const renderSpeed = () => { speedOut.textContent = `${speedEl.value}%`; };
+speedEl.value = localStorage.getItem(SPEED_STORAGE_KEY) || '100';
+speedEl.addEventListener('input', () => {
+  localStorage.setItem(SPEED_STORAGE_KEY, speedEl.value);
+  renderSpeed();
+});
+// Return focus to the page so Space/arrows keep driving the piano, not the slider.
+speedEl.addEventListener('change', () => speedEl.blur());
+
 customEl.value = localStorage.getItem(DRAFT_STORAGE_KEY) || '';
 customEl.addEventListener('input', () => {
   localStorage.setItem(DRAFT_STORAGE_KEY, customEl.value);
@@ -333,4 +515,6 @@ deleteBtn.addEventListener('click', () => {
 });
 
 renderSongList('b:0');
+renderSpeed();
 render();
+startClock();
