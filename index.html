@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Piyano</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main>
+    <header class="bar">
+      <h1>Piyano</h1>
+      <div class="stat"><span class="label">Sol el</span><output id="leftRange"></output></div>
+      <div class="stat"><span class="label">Sağ el</span><output id="rightRange"></output></div>
+      <div class="stat"><span class="label">Vuruş gücü</span><output id="velocityOut"></output></div>
+      <div class="stat" id="pedalStat"><span class="label">Pedal</span><output id="pedalOut">kapalı</output></div>
+      <label class="stat volume"><span class="label">Ses</span><input id="volume" type="range" min="0" max="1" step="0.01" value="0.7"></label>
+    </header>
+
+    <section class="tutor" aria-label="Öğretici">
+      <div class="tutor-row">
+        <label class="stat"><span class="label">Öğretici</span><select id="songSelect"></select></label>
+        <button id="tutorToggle" type="button">Başlat</button>
+        <label class="check"><input id="autoOctave" type="checkbox" checked> Oto oktav</label>
+        <label class="check"><input id="autoSustain" type="checkbox"> Oto sustain</label>
+        <p id="tutorStatus" class="tutor-status" aria-live="polite">Bir şarkı seç ve Başlat'a bas.</p>
+      </div>
+      <details class="custom">
+        <summary>Kendi notalarını ekle</summary>
+        <textarea id="customNotes" rows="3" spellcheck="false" placeholder="Örnek: Do4 Re4 Mi4 Do4+Mi4+Sol4   ya da   C4 D4 E4 C4+E4+G4"></textarea>
+        <div class="custom-row">
+          <button id="customStart" type="button">Bu notalarla başla</button>
+          <span id="tutorError" class="error" role="alert"></span>
+        </div>
+        <p class="hint">Notaları boşlukla ayır. Aynı anda basılacaklar için + (Do4+Mi4+Sol4), diyez için # (Fa#4), bemol için b (Sib3). Oktav yazmazsan 4 sayılır. Yazdıkların bu tarayıcıda saklanır.</p>
+      </details>
+    </section>
+
+    <div id="keyboard" class="keyboard" aria-label="Piyano klavyesi"></div>
+
+    <dl class="help">
+      <div><dt>Sol el</dt><dd>beyaz: Z X C V B N M · siyah: S D G H J</dd></div>
+      <div><dt>Sağ el</dt><dd>beyaz: Y U I O P [ ] \ · siyah: 7 8 0 - =</dd></div>
+      <div><dt>← →</dt><dd>oktav</dd></div>
+      <div><dt>↑ ↓</dt><dd>vuruş gücü</dd></div>
+      <div><dt>Boşluk</dt><dd>sustain pedalı (basılı tut)</dd></div>
+      <div><dt>Esc</dt><dd>tüm sesleri kes</dd></div>
+    </dl>
+  </main>
+  <script src="songs.js"></script>
+  <script src="piano.js"></script>
+  <script src="tutor.js"></script>
+</body>
+</html>
