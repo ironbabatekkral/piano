@@ -12,25 +12,58 @@ const freq = (m) => 440 * Math.pow(2, (m - 69) / 12);
 const noteName = (m) => NOTE_NAMES[m % 12] + (Math.floor(m / 12) - 1);
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
-// Physical key (KeyboardEvent.code) -> semitone offset from the hand's base note.
+// Keymap: physical key (KeyboardEvent.code) -> semitone offset from the left hand's base note.
 // event.code is layout independent, so Turkish Q and US layouts map identically.
-// The keyboard is split for two hands. Each hand has the shape of a real piano:
-// white keys on a letter row, black keys on the row above, between the whites they belong to.
-// Left hand (bottom-left) plays one octave; the right hand (top-right) continues directly above it.
-const LEFT_HAND = {
+// Offsets 0–11 are the left hand's octave, 12–24 the right hand's (up to the top C).
+// Default layout: each hand has the shape of a real piano, white keys on a letter row and
+// black keys on the row above. Left hand sits bottom-left, right hand top-right.
+const DEFAULT_KEYMAP = {
   KeyZ: 0, KeyS: 1, KeyX: 2, KeyD: 3, KeyC: 4, KeyV: 5, KeyG: 6, KeyB: 7, KeyH: 8,
   KeyN: 9, KeyJ: 10, KeyM: 11,
+  KeyY: 12, Digit7: 13, KeyU: 14, Digit8: 15, KeyI: 16, KeyO: 17, Digit0: 18, KeyP: 19,
+  Minus: 20, BracketLeft: 21, Equal: 22, BracketRight: 23, Backslash: 24,
 };
-const RIGHT_HAND = {
-  KeyY: 0, Digit7: 1, KeyU: 2, Digit8: 3, KeyI: 4, KeyO: 5, Digit0: 6, KeyP: 7, Minus: 8,
-  BracketLeft: 9, Equal: 10, BracketRight: 11, Backslash: 12,
+const PLAYABLE_SPAN = 24; // semitones from the lowest to the highest mappable note
+const LEFT_SPAN = 11;
+const MIN_BASE = 24;                       // C1
+const MAX_BASE = LAST_MIDI - PLAYABLE_SPAN; // top note must stay within C8
+
+// Keys that drive the piano's own controls (or are modifiers) and can never play a note.
+const RESERVED_CODES = new Set([
+  'Space', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Escape', 'Tab', 'CapsLock',
+  'ShiftLeft', 'ShiftRight', 'ControlLeft', 'ControlRight', 'AltLeft', 'AltRight',
+  'MetaLeft', 'MetaRight', 'ContextMenu',
+]);
+const KEYMAP_STORAGE_KEY = 'piano.keymap';
+
+function isValidKeymap(map) {
+  return map !== null && typeof map === 'object' && !Array.isArray(map) && Object.entries(map).every(
+    ([code, offset]) => !RESERVED_CODES.has(code) && Number.isInteger(offset) && offset >= 0 && offset <= PLAYABLE_SPAN,
+  );
+}
+
+function loadKeymap() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(KEYMAP_STORAGE_KEY));
+    if (isValidKeymap(saved)) return saved;
+  } catch { /* corrupt entry: fall back to the default */ }
+  return { ...DEFAULT_KEYMAP };
+}
+
+let keymap = loadKeymap();
+
+// Stored only in this browser's localStorage; nothing leaves the user's computer.
+function setKeymap(next) {
+  keymap = next;
+  localStorage.setItem(KEYMAP_STORAGE_KEY, JSON.stringify(next));
+  renderLabels();
+  document.dispatchEvent(new CustomEvent('piano:keymap'));
+}
+
+const FALLBACK_LABELS = {
+  Backquote: '`', Minus: '-', Equal: '=', BracketLeft: '[', BracketRight: ']', Backslash: '\\',
+  Semicolon: ';', Quote: '\'', Comma: ',', Period: '.', Slash: '/', IntlBackslash: '<',
 };
-const HAND_CODES = [...Object.keys(LEFT_HAND), ...Object.keys(RIGHT_HAND)];
-const FALLBACK_LABELS = { Minus: '-', Equal: '=', BracketLeft: '[', BracketRight: ']', Backslash: '\\' };
-const LEFT_SPAN = Math.max(...Object.values(LEFT_HAND));
-const RIGHT_SPAN = Math.max(...Object.values(RIGHT_HAND));
-const MIN_BASE = 24;                          // C1
-const MAX_BASE = LAST_MIDI - 12 - RIGHT_SPAN; // right hand must stay within C8
 
 const state = {
   leftBase: 48,    // C3; the right hand starts one octave higher
@@ -240,14 +273,16 @@ function keyLabel(code) {
   const ch = layoutMap && layoutMap.get(code);
   if (ch) return ch.toUpperCase();
   if (FALLBACK_LABELS[code]) return FALLBACK_LABELS[code];
-  return code.replace(/^(Key|Digit)/, '');
+  return code.replace(/^(Key|Digit|Numpad)/, '');
+}
+
+function codesFor(midi) {
+  return Object.keys(keymap).filter((code) => codeToMidi(code) === midi);
 }
 
 function renderLabels() {
-  for (const el of keyEls.values()) el.querySelector('.lbl').textContent = '';
-  for (const code of HAND_CODES) {
-    const el = keyEls.get(codeToMidi(code));
-    if (el) el.querySelector('.lbl').textContent = keyLabel(code);
+  for (const [midi, el] of keyEls) {
+    el.querySelector('.lbl').textContent = codesFor(midi).map(keyLabel).join(' ');
   }
 }
 
@@ -259,7 +294,7 @@ function renderKey(midi) {
 function renderStatus() {
   const lo = state.leftBase;
   document.getElementById('leftRange').textContent = `${noteName(lo)}–${noteName(lo + LEFT_SPAN)}`;
-  document.getElementById('rightRange').textContent = `${noteName(lo + 12)}–${noteName(lo + 12 + RIGHT_SPAN)}`;
+  document.getElementById('rightRange').textContent = `${noteName(lo + 12)}–${noteName(lo + PLAYABLE_SPAN)}`;
   document.getElementById('velocityOut').textContent = `${Math.round(state.velocity * 100)}%`;
   document.getElementById('pedalOut').textContent = state.sustain ? 'açık' : state.autoSustain ? 'oto' : 'kapalı';
   document.getElementById('pedalStat').classList.toggle('on', isSustained());
@@ -270,13 +305,8 @@ function renderStatus() {
 const keyNotes = new Map(); // event.code -> midi it started (survives octave shifts)
 
 function codeToMidi(code) {
-  if (code in LEFT_HAND) return state.leftBase + LEFT_HAND[code];
-  if (code in RIGHT_HAND) return state.leftBase + 12 + RIGHT_HAND[code];
-  return null;
+  return Object.hasOwn(keymap, code) ? state.leftBase + keymap[code] : null;
 }
-
-// Semitones from the lowest to the highest key both hands can reach at one octave position.
-const PLAYABLE_SPAN = 12 + RIGHT_SPAN;
 
 function setOctaveBase(base) {
   const next = clamp(base, MIN_BASE, MAX_BASE);
@@ -291,9 +321,17 @@ function shiftOctave(dir) {
   setOctaveBase(state.leftBase + dir * 12);
 }
 
+// While the keymap editor waits for a key, it receives every keydown instead of the piano.
+let keyCaptureHandler = null;
+
 window.addEventListener('keydown', (e) => {
+  if (keyCaptureHandler) {
+    keyCaptureHandler(e);
+    return;
+  }
   if (e.ctrlKey || e.metaKey || e.altKey) return; // leave browser shortcuts alone
-  if (e.target instanceof HTMLTextAreaElement) return; // typing notes into the tutor box
+  const t = e.target;
+  if (t instanceof HTMLTextAreaElement || (t instanceof HTMLInputElement && t.type === 'text')) return;
   const { code } = e;
 
   switch (code) {

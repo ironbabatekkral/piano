@@ -5,49 +5,41 @@
 // `sustain` is the default for the "Oto sustain" checkbox when the song is selected.
 // `tip` is shown before the song starts.
 // Popular intros are short right-hand transcriptions for personal practice; rhythm is not encoded.
+
+// Repeats a phrase n times (pieces built from a looping riff).
+const rep = (phrase, n) => Array(n).fill(phrase.trim()).join(' ');
+
 const SONGS = [
   {
     group: 'Popüler intro\'lar',
     title: 'Kanye West – Runaway',
     sustain: true,
-    tip: 'Tek nota ile başlar: aynı Mi\'ye 15 kez, eşit aralıklarla bas.',
-    notes: `E6 E6 E6 E6 E6 E6 E6 E6 E6 E6 E6 E6 E6 E6 E6
-            E6 E6 E6 E5  D#6 D#6 D#6 D#5  C#6 C#6 C#6 C#5  A5 A5 G#5
-            E6 E6 E6 E5  D#6 D#6 D#6 D#5  C#6 C#6 C#6 C#5  A5 A5 G#5`,
+    tip: 'Tek nota ile başlar: aynı Mi\'ye 15 kez, eşit aralıklarla bas. Sonra ana kalıp 6 kez döner.',
+    notes: rep('E6', 15) + ' ' + rep('E6 E6 E6 E5  D#6 D#6 D#6 D#5  C#6 C#6 C#6 C#5  A5 A5 G#5', 6),
   },
   {
     group: 'Popüler intro\'lar',
     title: 'Dr. Dre – Still D.R.E.',
     sustain: false,
-    tip: 'Akorlara kısa ve sert vur, hemen bırak. Her turda parmak tek tek kayar: 8 + 3 + 5 vuruş.',
-    notes: `C5+E5+A5 C5+E5+A5 C5+E5+A5 C5+E5+A5 C5+E5+A5 C5+E5+A5 C5+E5+A5 C5+E5+A5
-            B4+E5+A5 B4+E5+A5 B4+E5+A5  B4+E5+G5 B4+E5+G5 B4+E5+G5 B4+E5+G5 B4+E5+G5
-            C5+E5+A5 C5+E5+A5 C5+E5+A5 C5+E5+A5 C5+E5+A5 C5+E5+A5 C5+E5+A5 C5+E5+A5
-            B4+E5+A5 B4+E5+A5 B4+E5+A5  B4+E5+G5 B4+E5+G5 B4+E5+G5 B4+E5+G5 B4+E5+G5`,
+    tip: 'Akorlara kısa ve sert vur, hemen bırak. Her turda parmak tek tek kayar: 8 + 3 + 5 vuruş, 4 tur.',
+    notes: rep(`${rep('C5+E5+A5', 8)} ${rep('B4+E5+A5', 3)} ${rep('B4+E5+G5', 5)}`, 4),
   },
   {
     group: 'Popüler intro\'lar',
     title: 'Linkin Park – In the End',
     sustain: true,
-    tip: 'Aynı kalıp dört kez döner; son turda Fa\'da bitir ve çınlamaya bırak.',
-    notes: `Eb5 Bb5 Bb5 Gb5 F5 F5 F5 F5 Gb5
-            Eb5 Bb5 Bb5 Gb5 F5 F5 F5 F5 Gb5
-            Eb5 Bb5 Bb5 Gb5 F5 F5 F5 F5 Gb5
-            Eb5 Bb5 Bb5 Gb5 F5`,
+    tip: 'Aynı kalıp sekiz kez döner; son turda Fa\'da bitir ve çınlamaya bırak.',
+    notes: rep('Eb5 Bb5 Bb5 Gb5 F5 F5 F5 F5 Gb5', 7) + ' Eb5 Bb5 Bb5 Gb5 F5',
   },
   {
     group: 'Popüler intro\'lar',
     title: 'Coldplay – Clocks',
     sustain: true,
-    tip: 'Her ölçü yukarıdan aşağı üç notalık bir arpej: 3 + 3 + 2 vuruş.',
-    notes: `Eb5 Bb4 G4 Eb5 Bb4 G4 Eb5 Bb4
-            Db5 Bb4 F4 Db5 Bb4 F4 Db5 Bb4
-            Db5 Bb4 F4 Db5 Bb4 F4 Db5 Bb4
-            C5 Ab4 F4 C5 Ab4 F4 C5 Ab4
-            Eb5 Bb4 G4 Eb5 Bb4 G4 Eb5 Bb4
-            Db5 Bb4 F4 Db5 Bb4 F4 Db5 Bb4
-            Db5 Bb4 F4 Db5 Bb4 F4 Db5 Bb4
-            C5 Ab4 F4 C5 Ab4 F4 C5 Ab4`,
+    tip: 'Her ölçü yukarıdan aşağı üç notalık bir arpej: 3 + 3 + 2 vuruş. 4 ölçülük kalıp 4 kez döner.',
+    notes: rep(`Eb5 Bb4 G4 Eb5 Bb4 G4 Eb5 Bb4
+                Db5 Bb4 F4 Db5 Bb4 F4 Db5 Bb4
+                Db5 Bb4 F4 Db5 Bb4 F4 Db5 Bb4
+                C5 Ab4 F4 C5 Ab4 F4 C5 Ab4`, 4),
   },
   {
     group: 'Başlangıç',

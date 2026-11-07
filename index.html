@@ -10,6 +10,7 @@
   <main>
     <header class="bar">
       <h1>Piyano</h1>
+      <button id="keymapOpen" type="button">Tuş atamaları</button>
       <div class="stat"><span class="label">Sol el</span><output id="leftRange"></output></div>
       <div class="stat"><span class="label">Sağ el</span><output id="rightRange"></output></div>
       <div class="stat"><span class="label">Vuruş gücü</span><output id="velocityOut"></output></div>
@@ -23,32 +24,51 @@
         <button id="tutorToggle" type="button">Başlat</button>
         <label class="check"><input id="autoOctave" type="checkbox" checked> Oto oktav</label>
         <label class="check"><input id="autoSustain" type="checkbox"> Oto sustain</label>
-        <p id="tutorStatus" class="tutor-status" aria-live="polite">Bir şarkı seç ve Başlat'a bas.</p>
+        <label class="check"><input id="loopSong" type="checkbox"> Döngü</label>
+        <p id="tutorStatus" class="tutor-status" aria-live="polite"></p>
       </div>
       <details class="custom">
-        <summary>Kendi notalarını ekle</summary>
+        <summary>Kendi parçanı yap</summary>
+        <input id="customTitle" type="text" maxlength="80" spellcheck="false" placeholder="Parça adı">
         <textarea id="customNotes" rows="3" spellcheck="false" placeholder="Örnek: Do4 Re4 Mi4 Do4+Mi4+Sol4   ya da   C4 D4 E4 C4+E4+G4"></textarea>
         <div class="custom-row">
-          <button id="customStart" type="button">Bu notalarla başla</button>
+          <button id="customStart" type="button">Dene</button>
+          <button id="customSave" type="button">Kaydet</button>
+          <button id="customEdit" type="button" disabled>Seçili parçayı düzenle</button>
+          <button id="customDelete" type="button" disabled>Seçili parçayı sil</button>
           <span id="tutorError" class="error" role="alert"></span>
         </div>
-        <p class="hint">Notaları boşlukla ayır. Aynı anda basılacaklar için + (Do4+Mi4+Sol4), diyez için # (Fa#4), bemol için b (Sib3). Oktav yazmazsan 4 sayılır. Yazdıkların bu tarayıcıda saklanır.</p>
+        <p class="hint">Notaları boşlukla ayır. Aynı anda basılacaklar için + (Do4+Mi4+Sol4), diyez için # (Fa#4), bemol için b (Sib3). Oktav yazmazsan 4 sayılır. Kaydettiğin parçalar "Benim parçalarım" listesine eklenir; yalnızca bu tarayıcıda saklanır, hiçbir yere gönderilmez.</p>
       </details>
     </section>
 
     <div id="keyboard" class="keyboard" aria-label="Piyano klavyesi"></div>
 
     <dl class="help">
-      <div><dt>Sol el</dt><dd>beyaz: Z X C V B N M · siyah: S D G H J</dd></div>
-      <div><dt>Sağ el</dt><dd>beyaz: Y U I O P [ ] \ · siyah: 7 8 0 - =</dd></div>
+      <div><dt>Notalar</dt><dd>piyano tuşlarının üstündeki harfler · değiştirmek için "Tuş atamaları"</dd></div>
       <div><dt>← →</dt><dd>oktav</dd></div>
       <div><dt>↑ ↓</dt><dd>vuruş gücü</dd></div>
       <div><dt>Boşluk</dt><dd>sustain pedalı (basılı tut)</dd></div>
       <div><dt>Esc</dt><dd>tüm sesleri kes</dd></div>
     </dl>
   </main>
+
+  <dialog id="keymapDialog" class="keymap-dialog" aria-labelledby="keymapTitle">
+    <h2 id="keymapTitle">Tuş atamaları</h2>
+    <p class="hint">Bir tuşa bastığında sıradaki notaya geçer, böylece bütün klavyeyi arka arkaya atayabilirsin. Boşluk, ok tuşları ve Esc kontrol için ayrılmış. Atamalar yalnızca bu tarayıcıda saklanır.</p>
+    <div class="keymap-hands"><span>Sol el</span><span>Sağ el</span></div>
+    <div id="keymapBoard" class="keymap-board"></div>
+    <p id="keymapStatus" class="tutor-status" aria-live="polite"></p>
+    <div class="custom-row">
+      <button id="keymapClear" type="button">Seçili notanın tuşunu kaldır</button>
+      <button id="keymapReset" type="button">Varsayılana dön</button>
+      <button id="keymapClose" type="button">Kapat</button>
+    </div>
+  </dialog>
+
   <script src="songs.js"></script>
   <script src="piano.js"></script>
   <script src="tutor.js"></script>
+  <script src="keymap.js"></script>
 </body>
 </html>

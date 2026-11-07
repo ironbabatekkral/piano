@@ -1,14 +1,20 @@
 'use strict';
 
 // Wait-mode tutor: lights up the key(s) to play next and advances only when they are played.
-// Relies on globals from piano.js (keyEls, noteName, codeToMidi, keyLabel, HAND_CODES).
+// Relies on globals from piano.js (keyEls, noteName, codesFor, keyLabel, state, setOctaveBase, ...).
 
 const SOLFEGE_NAMES = ['Do', 'Do#', 'Re', 'Re#', 'Mi', 'Fa', 'Fa#', 'Sol', 'Sol#', 'La', 'La#', 'Si'];
 const solfege = (m) => SOLFEGE_NAMES[m % 12] + (Math.floor(m / 12) - 1);
 
 const PITCH = { c: 0, d: 2, e: 4, f: 5, g: 7, a: 9, b: 11, do: 0, re: 2, mi: 4, fa: 5, sol: 7, la: 9, si: 11 };
 const NOTE_RE = /^(do|re|mi|fa|sol|la|si|[a-g])(#|b)?(\d)?$/i;
-const CUSTOM_STORAGE_KEY = 'piano.customNotes';
+
+// Everything below is kept in this browser's localStorage only; nothing is uploaded anywhere.
+const DRAFT_STORAGE_KEY = 'piano.customNotes';
+const LIBRARY_STORAGE_KEY = 'piano.customSongs';
+const AUTO_OCTAVE_STORAGE_KEY = 'piano.autoOctave';
+const LOOP_STORAGE_KEY = 'piano.loop';
+const FINISH_RING_MS = 2000; // let the last note ring before auto-sustain lets go
 
 function parseNote(token) {
   const m = NOTE_RE.exec(token);
@@ -28,25 +34,69 @@ function parseSong(text) {
   return steps;
 }
 
-const tutor = { steps: [], index: 0, hits: new Set(), active: false, finished: false };
+const tutor = { steps: [], index: 0, round: 1, hits: new Set(), active: false, finished: false };
 
 const songSelect = document.getElementById('songSelect');
 const toggleBtn = document.getElementById('tutorToggle');
 const statusEl = document.getElementById('tutorStatus');
 const autoOctaveEl = document.getElementById('autoOctave');
 const autoSustainEl = document.getElementById('autoSustain');
+const loopEl = document.getElementById('loopSong');
+const titleEl = document.getElementById('customTitle');
 const customEl = document.getElementById('customNotes');
-const customBtn = document.getElementById('customStart');
+const tryBtn = document.getElementById('customStart');
+const saveBtn = document.getElementById('customSave');
+const editBtn = document.getElementById('customEdit');
+const deleteBtn = document.getElementById('customDelete');
 const errorEl = document.getElementById('tutorError');
 
-const AUTO_OCTAVE_STORAGE_KEY = 'piano.autoOctave';
-const FINISH_RING_MS = 2000; // let the last note ring before auto-sustain lets go
+const keyFor = (midi) => {
+  const codes = codesFor(midi);
+  return codes.length ? codes.map(keyLabel).join(' / ') : null;
+};
 
-function keyFor(midi) {
-  for (const code of HAND_CODES) {
-    if (codeToMidi(code) === midi) return keyLabel(code);
-  }
-  return null;
+// ---------- Local song library ----------
+
+function loadLibrary() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(LIBRARY_STORAGE_KEY));
+    if (Array.isArray(saved)) {
+      return saved.filter((s) => s && typeof s.title === 'string' && typeof s.notes === 'string');
+    }
+  } catch { /* corrupt entry: start with an empty library */ }
+  return [];
+}
+
+let library = loadLibrary();
+
+const saveLibrary = () => localStorage.setItem(LIBRARY_STORAGE_KEY, JSON.stringify(library));
+
+// Option values: "b:<index>" for built-in songs, "c:<index>" for the user's own songs.
+function selectedSong() {
+  const [kind, i] = songSelect.value.split(':');
+  return (kind === 'c' ? library : SONGS)[Number(i)];
+}
+
+const isCustomSelected = () => songSelect.value.startsWith('c:');
+
+function renderSongList(selectValue) {
+  const previous = selectValue ?? songSelect.value;
+  songSelect.textContent = '';
+  const groups = new Map();
+  const addOption = (group, title, value) => {
+    if (!groups.has(group)) {
+      const og = document.createElement('optgroup');
+      og.label = group;
+      songSelect.append(og);
+      groups.set(group, og);
+    }
+    groups.get(group).append(new Option(title, value));
+  };
+  library.forEach((song, i) => addOption('Benim parçalarım', song.title, `c:${i}`));
+  SONGS.forEach((song, i) => addOption(song.group, song.title, `b:${i}`));
+  const values = [...songSelect.options].map((o) => o.value);
+  songSelect.value = values.includes(previous) ? previous : `b:0`;
+  editBtn.disabled = deleteBtn.disabled = !isCustomSelected();
 }
 
 // ---------- Auto octave ----------
@@ -72,12 +122,8 @@ function fitCurrentStep() {
 
 // ---------- Lesson flow ----------
 
-function selectedSong() {
-  return SONGS[Number(songSelect.value)];
-}
-
 function start(steps) {
-  Object.assign(tutor, { steps, index: 0, active: true, finished: false });
+  Object.assign(tutor, { steps, index: 0, round: 1, active: true, finished: false });
   tutor.hits.clear();
   if (autoOctaveEl.checked) {
     // Prefer one position for the whole song so the keys don't move while playing.
@@ -96,6 +142,12 @@ function stop() {
 }
 
 function finish() {
+  if (loopEl.checked) {
+    tutor.index = 0;
+    tutor.round++;
+    fitCurrentStep();
+    return;
+  }
   tutor.active = false;
   tutor.finished = true;
   setTimeout(() => { if (!tutor.active) setAutoSustain(false); }, FINISH_RING_MS);
@@ -125,8 +177,9 @@ function render() {
     return `${solfege(m)} (${noteName(m)}) → ${key ? `${key} tuşu` : 'klavyede yok'}`;
   });
   const outOfRange = step.some((m) => keyFor(m) === null);
-  const hint = autoOctaveEl.checked ? ' · bu adım iki ele sığmıyor' : ' · ← → ile oktav değiştir';
-  statusEl.textContent = `${tutor.index + 1} / ${tutor.steps.length} · Sıradaki: ${parts.join(' + ')}`
+  const hint = autoOctaveEl.checked ? ' · bu notaya tuş atanmamış ya da iki ele sığmıyor' : ' · ← → ile oktav değiştir';
+  const round = loopEl.checked ? `Tur ${tutor.round} · ` : '';
+  statusEl.textContent = `${round}${tutor.index + 1} / ${tutor.steps.length} · Sıradaki: ${parts.join(' + ')}`
     + (outOfRange ? hint : '');
 }
 
@@ -160,19 +213,9 @@ function onNote(midi) {
 
 document.addEventListener('piano:note', (e) => onNote(e.detail));
 document.addEventListener('piano:octave', render);
+document.addEventListener('piano:keymap', render);
 
 // ---------- Controls ----------
-
-const groups = new Map();
-SONGS.forEach((song, i) => {
-  if (!groups.has(song.group)) {
-    const og = document.createElement('optgroup');
-    og.label = song.group;
-    songSelect.append(og);
-    groups.set(song.group, og);
-  }
-  groups.get(song.group).append(new Option(song.title, String(i)));
-});
 
 function applySongDefaults() {
   autoSustainEl.checked = Boolean(selectedSong().sustain);
@@ -180,6 +223,7 @@ function applySongDefaults() {
 
 songSelect.addEventListener('change', () => {
   songSelect.blur();
+  editBtn.disabled = deleteBtn.disabled = !isCustomSelected();
   applySongDefaults();
   if (tutor.active) start(parseSong(selectedSong().notes));
   else render();
@@ -204,21 +248,71 @@ autoSustainEl.addEventListener('change', () => {
   if (tutor.active) setAutoSustain(autoSustainEl.checked);
 });
 
-customEl.value = localStorage.getItem(CUSTOM_STORAGE_KEY) || '';
-customEl.addEventListener('input', () => {
-  localStorage.setItem(CUSTOM_STORAGE_KEY, customEl.value);
-  errorEl.textContent = '';
+loopEl.checked = localStorage.getItem(LOOP_STORAGE_KEY) === 'true';
+loopEl.addEventListener('change', () => {
+  loopEl.blur();
+  localStorage.setItem(LOOP_STORAGE_KEY, String(loopEl.checked));
+  render();
 });
 
-customBtn.addEventListener('click', () => {
-  customBtn.blur();
+customEl.value = localStorage.getItem(DRAFT_STORAGE_KEY) || '';
+customEl.addEventListener('input', () => {
+  localStorage.setItem(DRAFT_STORAGE_KEY, customEl.value);
+  errorEl.textContent = '';
+});
+titleEl.addEventListener('input', () => { errorEl.textContent = ''; });
+
+// Runs fn and shows its error message instead of throwing.
+function report(fn) {
   try {
-    start(parseSong(customEl.value));
+    fn();
     errorEl.textContent = '';
   } catch (err) {
     errorEl.textContent = err.message;
   }
+}
+
+tryBtn.addEventListener('click', () => {
+  tryBtn.blur();
+  report(() => start(parseSong(customEl.value)));
 });
 
+saveBtn.addEventListener('click', () => {
+  saveBtn.blur();
+  report(() => {
+    const title = titleEl.value.trim();
+    if (!title) throw new Error('Parçaya bir ad ver.');
+    parseSong(customEl.value); // validate before saving
+    const song = { title, notes: customEl.value.trim(), sustain: autoSustainEl.checked };
+    const existing = library.findIndex((s) => s.title === title);
+    if (existing >= 0) library[existing] = song;
+    else library.push(song);
+    saveLibrary();
+    renderSongList(`c:${existing >= 0 ? existing : library.length - 1}`);
+    render();
+  });
+});
+
+editBtn.addEventListener('click', () => {
+  editBtn.blur();
+  const song = selectedSong();
+  titleEl.value = song.title;
+  customEl.value = song.notes;
+  localStorage.setItem(DRAFT_STORAGE_KEY, customEl.value);
+});
+
+deleteBtn.addEventListener('click', () => {
+  deleteBtn.blur();
+  const song = selectedSong();
+  if (!confirm(`"${song.title}" silinsin mi?`)) return;
+  if (tutor.active) stop();
+  library.splice(Number(songSelect.value.split(':')[1]), 1);
+  saveLibrary();
+  renderSongList('b:0');
+  applySongDefaults();
+  render();
+});
+
+renderSongList('b:0');
 applySongDefaults();
 render();

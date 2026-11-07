@@ -98,7 +98,7 @@ output { font-weight: 600; font-variant-numeric: tabular-nums; }
 .check { display: flex; align-items: center; gap: 6px; height: 32px; cursor: pointer; }
 .check input { accent-color: var(--accent); margin: 0; }
 
-select, button, textarea {
+select, button, textarea, input[type="text"] {
   font: inherit;
   color: var(--fg);
   background: #2a2926;
@@ -107,15 +107,52 @@ select, button, textarea {
 }
 select, button { height: 32px; padding: 0 12px; }
 button { cursor: pointer; }
-button:hover, select:hover { border-color: var(--muted); }
-select:focus-visible, button:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button:disabled { cursor: default; opacity: 0.45; }
+button:hover:not(:disabled), select:hover { border-color: var(--muted); }
+select:focus-visible, button:focus-visible, textarea:focus-visible, input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 
 .custom { margin-top: 10px; }
 .custom summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+.custom input[type="text"] { display: block; width: min(100%, 360px); height: 32px; margin-top: 8px; padding: 0 8px; user-select: text; }
 .custom textarea { display: block; width: 100%; margin-top: 8px; padding: 8px; resize: vertical; user-select: text; }
-.custom-row { display: flex; align-items: center; gap: 12px; margin-top: 8px; }
+.custom-row { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-top: 8px; }
 .error { color: #e5756b; font-size: 13px; }
 .hint { margin: 6px 0 0; color: var(--muted); font-size: 12px; }
+
+.keymap-dialog {
+  width: min(92vw, 900px);
+  padding: 20px 24px;
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid #3d3b37;
+  border-radius: 6px;
+}
+.keymap-dialog::backdrop { background: rgb(0 0 0 / 0.6); }
+.keymap-dialog h2 { margin: 0; font-size: 18px; font-weight: 600; }
+.keymap-hands { display: grid; grid-template-columns: 7fr 8fr; margin: 16px 0 4px; font-size: 12px; color: var(--muted); }
+.keymap-board { position: relative; display: flex; height: 170px; background: #0e0e0d; border-radius: 4px; overflow: hidden; }
+.slot {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 2px;
+  height: auto;
+  padding: 0 0 8px;
+  border-radius: 0 0 4px 4px;
+}
+.slot.white { flex: 1 1 0; background: var(--ivory); color: #3a3732; border: 0; border-right: 1px solid var(--ivory-edge); }
+.slot.black { position: absolute; top: 0; height: 60%; z-index: 2; background: var(--ebony); color: #ece8df; border: 0; }
+.slot.right.white { background: #efeadf; }
+.slot-key { font-size: 14px; font-weight: 700; }
+.slot-note { font-size: 10px; opacity: 0.7; }
+.slot.empty .slot-key { opacity: 0.4; }
+.slot.selected.white { background: #f9dcae; box-shadow: inset 0 -50px 30px -24px var(--accent); }
+.slot.selected.black { background: var(--accent); color: #1a1a1a; }
 
 .help {
   display: flex;
